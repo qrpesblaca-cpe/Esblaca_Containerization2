@@ -1,0 +1,56 @@
+---
+# tasks file for docker_lamp
+- name: Create Docker Directory
+  file:
+    path: docker
+    state: directory
+
+- name: Copy from Docker Directory Files to Remote Machine
+  copy:
+    src: docker/
+    dest: docker/
+
+- name: Build Web Server Docker Image from Dockerfile
+  docker_image:
+    name: "{{ web_docker_img_name }}"
+    build:
+      path: "{{ web_dockerfile_path }}"
+      pull: no
+    state: present
+    source: build
+  register: web_docker_img
+
+- name: Build DB Server Docker Image from Dockerfile
+  docker_image:
+    name: "{{ db_docker_img_name }}"
+    build:
+      path: "{{ db_dockerfile_path }}"
+      pull: no
+    state: present
+    source: build
+  register: db_docker_img
+
+- name: Clear IPTables Filter
+  shell: iptables -F; iptables -X
+  when: web_docker_img.changed or db_docker_img.changed
+
+- name: Restart Docker
+  service:
+    name: docker
+    state: restarted
+  when: web_docker_img.changed or db_docker_img.changed
+
+# tasks file for roles/rundockercontainer
+- name: Run Web Server Container
+  docker_container:
+   name: "{{ web_container_name }}"
+   image: "{{ web_docker_img_name }}:{ web_docker_img_tag }}"
+   privileged: yes
+   published_ports: "{{ web_ports }}"
+
+- name: Run DB Server Container
+  docker_container:
+    name: "{{ db_container_name }}"
+    image: "{{ db_docker_img_name }}:{{ db_docker_img_tag }}"
+    privileged: yes
+    published_ports: "{{ db_ports }}"
